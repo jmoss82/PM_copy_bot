@@ -1,0 +1,31 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local persisted state
+state/
+*.json.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
