@@ -23,16 +23,42 @@ SCALING_MODES = {"fixed_notional", "proportional", "fixed_ratio", "fixed_size"}
 MARKET_FILTERS = {"crypto_short", "crypto_any", "all"}
 
 
-def _bool(name: str, default: bool) -> bool:
+def _clean(name: str, default: str = "") -> str:
+    """Read an env var and strip whitespace + surrounding quotes.
+
+    Railway's UI treats wrapping quotes as literal characters, so values
+    pasted as `"0x..."` arrive with quotes attached. Normalise here so
+    every downstream consumer sees the same shape regardless of source.
+    """
     raw = os.getenv(name)
     if raw is None:
         return default
-    return raw.strip().lower() in {"true", "1", "yes", "y", "on"}
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+        raw = raw[1:-1].strip()
+    return raw
+
+
+def _normalize_priv_key(raw: str) -> str:
+    """Accept private keys with or without 0x prefix; surface as 0x + 64 hex."""
+    if not raw:
+        return ""
+    key = raw.strip()
+    if key.lower().startswith("0x"):
+        key = key[2:]
+    return f"0x{key}" if key else ""
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = _clean(name)
+    if not raw:
+        return default
+    return raw.lower() in {"true", "1", "yes", "y", "on"}
 
 
 def _float(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
+    raw = _clean(name)
+    if not raw:
         return default
     try:
         return float(raw)
@@ -41,8 +67,8 @@ def _float(name: str, default: float) -> float:
 
 
 def _int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
+    raw = _clean(name)
+    if not raw:
         return default
     try:
         return int(raw)
@@ -51,7 +77,7 @@ def _int(name: str, default: int) -> int:
 
 
 def _str_list(name: str) -> List[str]:
-    raw = os.getenv(name, "") or ""
+    raw = _clean(name)
     return [s.strip().lower() for s in raw.split(",") if s.strip()]
 
 
@@ -109,15 +135,15 @@ class CopyBotConfig:
 
 def load_config() -> CopyBotConfig:
     cfg = CopyBotConfig(
-        poly_private_key=os.getenv("POLY_PRIVATE_KEY", "") or "",
-        poly_funder=os.getenv("POLY_FUNDER", "") or "",
-        poly_api_key=os.getenv("POLY_API_KEY", "") or "",
-        poly_api_secret=os.getenv("POLY_API_SECRET", "") or "",
-        poly_api_passphrase=os.getenv("POLY_API_PASSPHRASE", "") or "",
+        poly_private_key=_normalize_priv_key(_clean("POLY_PRIVATE_KEY")),
+        poly_funder=_clean("POLY_FUNDER"),
+        poly_api_key=_clean("POLY_API_KEY"),
+        poly_api_secret=_clean("POLY_API_SECRET"),
+        poly_api_passphrase=_clean("POLY_API_PASSPHRASE"),
         chain_id=_int("CHAIN_ID", 137),
-        clob_host=os.getenv("CLOB_HOST", "https://clob.polymarket.com") or "https://clob.polymarket.com",
-        target_address=os.getenv("COPY_TARGET_ADDRESS", "") or "",
-        scaling_mode=(os.getenv("COPY_SCALING_MODE", "fixed_notional") or "fixed_notional").strip().lower(),
+        clob_host=_clean("CLOB_HOST", "https://clob.polymarket.com"),
+        target_address=_clean("COPY_TARGET_ADDRESS"),
+        scaling_mode=_clean("COPY_SCALING_MODE", "fixed_notional").lower(),
         fixed_notional_usd=_float("COPY_FIXED_NOTIONAL_USD", 25.0),
         fixed_ratio=_float("COPY_FIXED_RATIO", 0.05),
         fixed_size=_float("COPY_FIXED_SIZE", 10.0),
@@ -129,12 +155,12 @@ def load_config() -> CopyBotConfig:
         poll_interval_seconds=_float("COPY_POLL_INTERVAL", 3.0),
         slippage_bps=_int("COPY_SLIPPAGE_BPS", 100),
         mirror_closes=_bool("COPY_MIRROR_CLOSES", True),
-        market_filter=(os.getenv("COPY_MARKET_FILTER", "crypto_short") or "crypto_short").strip().lower(),
+        market_filter=_clean("COPY_MARKET_FILTER", "crypto_short").lower(),
         extra_allow_slugs=_str_list("COPY_EXTRA_ALLOW_SLUGS"),
         extra_block_slugs=_str_list("COPY_EXTRA_BLOCK_SLUGS"),
         resume_from_cursor=_bool("COPY_RESUME_FROM_CURSOR", False),
         dry_run=_bool("COPY_DRY_RUN", True),
-        log_level=(os.getenv("COPY_LOG_LEVEL", "INFO") or "INFO").upper(),
+        log_level=_clean("COPY_LOG_LEVEL", "INFO").upper(),
     )
     return cfg
 
