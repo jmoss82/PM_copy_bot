@@ -22,6 +22,7 @@ from py_clob_client.clob_types import (
     ApiCreds,
     AssetType,
     BalanceAllowanceParams,
+    MarketOrderArgs,
     OrderArgs,
     OrderType,
 )
@@ -286,14 +287,37 @@ class PolymarketClient:
 
         side must be 'BUY' or 'SELL'. Polymarket prices are in [0, 1] and
         size is in shares.
+
+        BUYs are routed through the "market order" builder path because
+        Polymarket's server requires the USDC (maker) side of a BUY to be
+        quantized to 2 decimals. The regular OrderArgs path computes
+        maker = size * price which can land on a 4-decimal USDC value
+        (e.g. 5.05 * 0.99 = 4.9995) and gets rejected. MarketOrderArgs
+        inverts the math: maker = amount (USD, 2dec), taker = amount / price
+        (shares, 4dec) — both within server tolerances. We still post with
+        OrderType.FAK so only the build-side math changes.
         """
         side_u = side.upper()
         if side_u not in {"BUY", "SELL"}:
             raise ValueError(f"side must be BUY or SELL, got {side!r}")
+
+        if side_u == "BUY":
+            usd_amount = round(float(size) * float(price), 2)
+            if usd_amount <= 0:
+                raise ValueError(
+                    f"BUY usd amount rounded to zero "
+                    f"(size={size}, price={price})"
+                )
+            margs = MarketOrderArgs(
+                token_id=token_id,
+                amount=usd_amount,
+                side="BUY",
+                price=float(price),
+            )
+            signed = self.clob.create_market_order(margs)
+            return self.clob.post_order(signed, OrderType.FAK)
+
         args = OrderArgs(token_id=token_id, price=price, size=size, side=side_u)
-        # NOTE: clob.create_and_post_order() hardcodes GTC and its 2nd arg is
-        # PartialCreateOrderOptions, not OrderType. To place a FAK we must
-        # build the signed order first, then post with the FAK order type.
         signed = self.clob.create_order(args)
         return self.clob.post_order(signed, OrderType.FAK)
 
