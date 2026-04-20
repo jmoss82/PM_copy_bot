@@ -242,25 +242,30 @@ class TradeCopier:
         self,
         token_id: str,
         is_buy: bool,
-        fallback: float,
-    ) -> float:
+    ) -> Optional[float]:
         """
         Pick a limit price that should fill immediately as a FAK.
 
         We use the best opposing quote (best_ask for BUY, best_bid for SELL)
         and nudge past it by slippage_bps (treating 10000 bps = $1 on the 0..1
-        probability scale). Falls back to event price if the book read fails.
+        probability scale).
+
+        Returns None if the side we'd take is missing — that means the market
+        has no liquidity for our intended direction (often because the market
+        is closed or resolving), and we should skip the trade rather than
+        guess a fallback price that's certain to be rejected.
         """
         slip = self.cfg.slippage_bps / 10_000.0
         best_bid, best_ask = self.poly.get_best_prices(token_id)
         if is_buy:
-            base = best_ask if best_ask is not None else fallback
-            px = min(0.99, base + slip)
+            if best_ask is None:
+                return None
+            px = min(0.99, best_ask + slip)
         else:
-            base = best_bid if best_bid is not None else fallback
-            px = max(0.01, base - slip)
+            if best_bid is None:
+                return None
+            px = max(0.01, best_bid - slip)
 
-        # Round to Polymarket's 0.01 (1 cent) tick size.
         px = round(px, 2)
         px = max(0.01, min(0.99, px))
         return px
@@ -364,7 +369,17 @@ class TradeCopier:
                 skipped_reason=block,
             )
 
-        limit_price = self._aggressive_limit_price(event.token_id, is_buy, event.price)
+        limit_price = self._aggressive_limit_price(event.token_id, is_buy)
+        if limit_price is None:
+            msg = (
+                f"no orderbook for {'asks' if is_buy else 'bids'} on this token "
+                "(market likely closed/resolving) — skipping"
+            )
+            return CopyResult(
+                success=False, side=side, token_id=event.token_id,
+                requested_shares=shares, requested_usd=shares * event.price,
+                limit_price=0.0, skipped_reason=msg,
+            )
 
         # Dry run shortcut.
         if self.cfg.dry_run:

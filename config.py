@@ -107,6 +107,10 @@ class CopyBotConfig:
     max_daily_trades: int = 100
     min_trade_usd: float = 1.0
     max_position_usd: float = 200.0
+    # Skip BUYs when the leader's fill price exceeds this. Near-resolution
+    # markets often clear at 0.99: max upside ~$0.01/share, max loss ~$0.99/share.
+    # Asymmetry is fatal at small sizes, so default to refusing > 0.95.
+    max_entry_price: float = 0.95
 
     # ── Execution ──────────────────────────────────────────────
     poll_interval_seconds: float = 3.0
@@ -152,6 +156,7 @@ def load_config() -> CopyBotConfig:
         max_daily_trades=_int("COPY_MAX_DAILY_TRADES", 100),
         min_trade_usd=_float("COPY_MIN_TRADE_USD", 1.0),
         max_position_usd=_float("COPY_MAX_POSITION_USD", 200.0),
+        max_entry_price=_float("COPY_MAX_ENTRY_PRICE", 0.95),
         poll_interval_seconds=_float("COPY_POLL_INTERVAL", 3.0),
         slippage_bps=_int("COPY_SLIPPAGE_BPS", 100),
         mirror_closes=_bool("COPY_MIRROR_CLOSES", True),
@@ -197,6 +202,11 @@ def validate_config(cfg: CopyBotConfig) -> None:
         raise ValueError("COPY_POLL_INTERVAL must be >= 0.5 seconds")
     if cfg.slippage_bps < 0:
         raise ValueError("COPY_SLIPPAGE_BPS must be non-negative")
+    if not 0.0 < cfg.max_entry_price <= 1.0:
+        raise ValueError(
+            "COPY_MAX_ENTRY_PRICE must be between 0 (exclusive) and 1 "
+            f"(got {cfg.max_entry_price})"
+        )
 
     if cfg.scaling_mode == "fixed_notional" and cfg.fixed_notional_usd <= 0:
         raise ValueError("COPY_FIXED_NOTIONAL_USD must be > 0 when scaling_mode=fixed_notional")

@@ -113,6 +113,7 @@ Flip `COPY_DRY_RUN=false` in `.env` and restart.
 | `COPY_MAX_DAILY_TRADES`  | `100`     | Rolling 24h trade count cap. `0` disables.         |
 | `COPY_MIN_TRADE_USD`     | `1.0`     | Ignore signals smaller than this in $.             |
 | `COPY_MAX_POSITION_USD`  | `200.0`   | Max $ exposure per outcome token. `0` disables.    |
+| `COPY_MAX_ENTRY_PRICE`   | `0.95`    | Skip BUYs above this fill price. Near-certainty trades (e.g. 0.99) have asymmetric risk: max +1c upside vs. -99c downside. Set to `1.0` to disable. |
 
 ### Execution
 
@@ -126,7 +127,7 @@ Flip `COPY_DRY_RUN=false` in `.env` and restart.
 
 | Variable                  | Default         | Notes                                                    |
 |---------------------------|-----------------|----------------------------------------------------------|
-| `COPY_MARKET_FILTER`      | `crypto_short`  | `crypto_short` (BTC/ETH + 5m/15m) / `crypto_any` / `all`.|
+| `COPY_MARKET_FILTER`      | `crypto_short`  | `crypto_short` (BTC/ETH + 5m/15m only) / `crypto_any` (BTC/ETH/SOL/XRP/DOGE/HYPE/ADA/AVAX/LINK/LTC/DOT/SHIB/MATIC/TRX) / `all`. |
 | `COPY_EXTRA_ALLOW_SLUGS`  | `""`            | Comma-separated slug substrings to always follow.        |
 | `COPY_EXTRA_BLOCK_SLUGS`  | `""`            | Comma-separated slug substrings to always skip.          |
 

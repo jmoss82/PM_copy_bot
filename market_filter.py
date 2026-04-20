@@ -24,8 +24,32 @@ from typing import Iterable, Optional
 from polymarket_client import PolymarketMarket
 
 
-CRYPTO_TOKENS = ("btc", "bitcoin", "eth", "ethereum", "sol", "solana")
-CRYPTO_SHORT_ONLY_TOKENS = ("btc", "bitcoin", "eth", "ethereum")
+# Map of slug/question fragments -> canonical ticker. Order matters only for
+# logging consistency; lookup is exhaustive. Add new tickers here as
+# Polymarket launches more crypto Up/Down markets.
+CRYPTO_TOKEN_ALIASES: dict[str, str] = {
+    "bitcoin": "btc", "btc": "btc",
+    "ethereum": "eth", "eth": "eth",
+    "solana": "sol", "sol": "sol",
+    "xrp": "xrp", "ripple": "xrp",
+    "dogecoin": "doge", "doge": "doge",
+    "hyperliquid": "hype", "hype": "hype",
+    "cardano": "ada", "ada": "ada",
+    "avalanche": "avax", "avax": "avax",
+    "chainlink": "link", "link": "link",
+    "litecoin": "ltc", "ltc": "ltc",
+    "polkadot": "dot", "dot": "dot",
+    "shiba-inu": "shib", "shib": "shib",
+    "polygon": "matic", "matic": "matic",
+    "tron": "trx", "trx": "trx",
+}
+# Tokens used to detect the symbol (longer aliases first so "ethereum" beats "eth").
+CRYPTO_TOKENS: tuple[str, ...] = tuple(
+    sorted(CRYPTO_TOKEN_ALIASES.keys(), key=len, reverse=True)
+)
+# Strict crypto_short mode is intentionally narrower — only the deepest two
+# books — to avoid altcoin liquidity gaps in 5m/15m markets.
+CRYPTO_SHORT_ONLY_TOKENS = ("btc", "eth")
 
 SHORT_TIMEFRAME_RE = re.compile(
     r"(?:^|[-_])(?:updown|up-or-down|up-down|price)[-_]?(?P<tf>5m|15m)(?:[-_]|$)",
@@ -45,17 +69,15 @@ class FilterDecision:
 
 
 def _detect_symbol(slug: str, question: str) -> str:
-    slug_l = (slug or "").lower()
-    q_l = (question or "").lower()
+    """Return the canonical crypto ticker found in the slug/question, or ''."""
+    # Pad with delimiters so a substring check behaves like a word-boundary
+    # check (avoids "eth" matching inside "method", "doge" inside "dogecoin"
+    # is fine because we already alias both, etc.).
+    slug_padded = f"-{(slug or '').lower()}-"
+    q_padded = f" {(question or '').lower()} "
     for token in CRYPTO_TOKENS:
-        if token in slug_l or token in q_l:
-            # Normalise to ticker
-            if token in ("bitcoin", "btc"):
-                return "btc"
-            if token in ("ethereum", "eth"):
-                return "eth"
-            if token in ("solana", "sol"):
-                return "sol"
+        if f"-{token}-" in slug_padded or f" {token} " in q_padded:
+            return CRYPTO_TOKEN_ALIASES.get(token, token)
     return ""
 
 
