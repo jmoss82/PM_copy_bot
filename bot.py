@@ -157,16 +157,6 @@ class CopyBot:
             )
             return
 
-        # Reject near-certainty BUYs: max upside is (1 - price), max loss is
-        # ~price. Asymmetry kills you at small notional sizes.
-        if event.side == "BUY" and event.price > self.cfg.max_entry_price:
-            logger.info(
-                f"  SKIP: leader entry price {event.price:.3f} > "
-                f"COPY_MAX_ENTRY_PRICE {self.cfg.max_entry_price:.3f} "
-                "(near-certainty trade, asymmetric risk)"
-            )
-            return
-
         shares, sizing_note = await self.copier.compute_copy_size(event, session)
         if shares <= 0:
             logger.info(f"  SKIP: sizing resolved to 0 shares ({sizing_note})")
@@ -332,8 +322,7 @@ async def _amain() -> None:
     logger.info(
         f"Caps:       trade=${cfg.max_trade_usd:.2f} "
         f"daily=${cfg.max_daily_usd:.2f} (<= {cfg.max_daily_trades} trades) "
-        f"min=${cfg.min_trade_usd:.2f} pos=${cfg.max_position_usd:.2f} "
-        f"max_entry={cfg.max_entry_price:.3f}"
+        f"min=${cfg.min_trade_usd:.2f} pos=${cfg.max_position_usd:.2f}"
     )
     logger.info(
         f"Execution:  slippage={cfg.slippage_bps}bps "

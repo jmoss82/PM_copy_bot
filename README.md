@@ -113,7 +113,6 @@ Flip `COPY_DRY_RUN=false` in `.env` and restart.
 | `COPY_MAX_DAILY_TRADES`  | `100`     | Rolling 24h trade count cap. `0` disables.         |
 | `COPY_MIN_TRADE_USD`     | `1.0`     | Ignore signals smaller than this in $.             |
 | `COPY_MAX_POSITION_USD`  | `200.0`   | Max $ exposure per outcome token. `0` disables.    |
-| `COPY_MAX_ENTRY_PRICE`   | `0.95`    | Skip BUYs above this fill price. Near-certainty trades (e.g. 0.99) have asymmetric risk: max +1c upside vs. -99c downside. Set to `1.0` to disable. |
 
 ### Execution
 
