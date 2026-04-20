@@ -112,6 +112,7 @@ class CopyBotConfig:
     poll_interval_seconds: float = 3.0
     slippage_bps: int = 100
     mirror_closes: bool = True
+    order_retries: int = 0
 
     # ── Market filter ──────────────────────────────────────────
     market_filter: str = "crypto_short"
@@ -155,6 +156,7 @@ def load_config() -> CopyBotConfig:
         poll_interval_seconds=_float("COPY_POLL_INTERVAL", 3.0),
         slippage_bps=_int("COPY_SLIPPAGE_BPS", 100),
         mirror_closes=_bool("COPY_MIRROR_CLOSES", True),
+        order_retries=_int("COPY_ORDER_RETRIES", 0),
         market_filter=_clean("COPY_MARKET_FILTER", "crypto_short").lower(),
         extra_allow_slugs=_str_list("COPY_EXTRA_ALLOW_SLUGS"),
         extra_block_slugs=_str_list("COPY_EXTRA_BLOCK_SLUGS"),
@@ -197,6 +199,8 @@ def validate_config(cfg: CopyBotConfig) -> None:
         raise ValueError("COPY_POLL_INTERVAL must be >= 0.5 seconds")
     if cfg.slippage_bps < 0:
         raise ValueError("COPY_SLIPPAGE_BPS must be non-negative")
+    if cfg.order_retries < 0:
+        raise ValueError("COPY_ORDER_RETRIES must be non-negative")
 
     if cfg.scaling_mode == "fixed_notional" and cfg.fixed_notional_usd <= 0:
         raise ValueError("COPY_FIXED_NOTIONAL_USD must be > 0 when scaling_mode=fixed_notional")

@@ -242,7 +242,7 @@ class TradeCopier:
         self,
         token_id: str,
         is_buy: bool,
-    ) -> Optional[float]:
+    ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
         """
         Pick a limit price that should fill immediately as a FAK.
 
@@ -256,19 +256,30 @@ class TradeCopier:
         guess a fallback price that's certain to be rejected.
         """
         slip = self.cfg.slippage_bps / 10_000.0
-        best_bid, best_ask = self.poly.get_best_prices(token_id)
+        best_bid, best_ask = self.poly.get_best_prices(
+            token_id,
+            allow_midpoint_fallback=False,
+        )
         if is_buy:
             if best_ask is None:
-                return None
+                return None, best_bid, best_ask
             px = min(0.99, best_ask + slip)
         else:
             if best_bid is None:
-                return None
+                return None, best_bid, best_ask
             px = max(0.01, best_bid - slip)
 
         px = round(px, 2)
         px = max(0.01, min(0.99, px))
-        return px
+        return px, best_bid, best_ask
+
+    @staticmethod
+    def _is_no_match_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return (
+            "no orders found to match" in text
+            or "killed if no match is found" in text
+        )
 
     def _record_trade(self, usd: float) -> None:
         self._trades.append((time.time(), usd))
@@ -369,7 +380,10 @@ class TradeCopier:
                 skipped_reason=block,
             )
 
-        limit_price = self._aggressive_limit_price(event.token_id, is_buy)
+        limit_price, best_bid, best_ask = self._aggressive_limit_price(
+            event.token_id,
+            is_buy,
+        )
         if limit_price is None:
             msg = (
                 f"no orderbook for {'asks' if is_buy else 'bids'} on this token "
@@ -404,22 +418,64 @@ class TradeCopier:
 
         logger.warning(
             f"EXECUTING {side} {shares:.2f} sh @ {limit_price:.3f} "
-            f"(${shares * limit_price:.2f}) token={event.token_id[:10]}... | {sizing_note}"
+            f"(${shares * limit_price:.2f}) token={event.token_id[:10]}... "
+            f"| book bid={best_bid if best_bid is not None else 'None'} "
+            f"ask={best_ask if best_ask is not None else 'None'} "
+            f"| {sizing_note}"
         )
 
-        try:
-            resp = self.poly.place_fak(
-                token_id=event.token_id,
-                price=limit_price,
-                size=shares,
-                side=side,
-            )
-        except Exception as exc:
-            logger.error(f"order submit raised: {exc}")
+        attempts = 1 + max(0, int(self.cfg.order_retries))
+        last_exc: Optional[Exception] = None
+        resp: Optional[dict] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                resp = self.poly.place_fak(
+                    token_id=event.token_id,
+                    price=limit_price,
+                    size=shares,
+                    side=side,
+                )
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= attempts or not self._is_no_match_error(exc):
+                    logger.error(f"order submit raised: {exc}")
+                    return CopyResult(
+                        success=False, side=side, token_id=event.token_id,
+                        requested_shares=shares, requested_usd=notional,
+                        limit_price=limit_price, error=str(exc),
+                    )
+
+                logger.warning(
+                    f"FAK found no match on attempt {attempt}/{attempts}; "
+                    "refreshing the book and retrying"
+                )
+                limit_price, best_bid, best_ask = self._aggressive_limit_price(
+                    event.token_id,
+                    is_buy,
+                )
+                if limit_price is None:
+                    msg = (
+                        f"retry aborted: no orderbook for "
+                        f"{'asks' if is_buy else 'bids'} on this token"
+                    )
+                    return CopyResult(
+                        success=False, side=side, token_id=event.token_id,
+                        requested_shares=shares, requested_usd=notional,
+                        limit_price=0.0, error=msg,
+                    )
+                logger.warning(
+                    f"RETRYING {side} {shares:.2f} sh @ {limit_price:.3f} "
+                    f"token={event.token_id[:10]}... "
+                    f"| book bid={best_bid if best_bid is not None else 'None'} "
+                    f"ask={best_ask if best_ask is not None else 'None'}"
+                )
+
+        if resp is None:
             return CopyResult(
                 success=False, side=side, token_id=event.token_id,
                 requested_shares=shares, requested_usd=notional,
-                limit_price=limit_price, error=str(exc),
+                limit_price=limit_price, error=str(last_exc or "unknown order error"),
             )
 
         return self._parse_order_response(

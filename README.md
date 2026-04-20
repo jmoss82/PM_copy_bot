@@ -121,6 +121,7 @@ Flip `COPY_DRY_RUN=false` in `.env` and restart.
 | `COPY_POLL_INTERVAL`  | `3.0`   | Seconds between activity polls. Shorter = more API load.                 |
 | `COPY_SLIPPAGE_BPS`   | `100`   | Aggressive offset from best quote for FAK orders (10000 bps = $1 price). |
 | `COPY_MIRROR_CLOSES`  | `true`  | If `false`, only mirror BUYs and let the bot hold through resolution.    |
+| `COPY_ORDER_RETRIES`  | `0`     | Extra live reattempts after a FAK "no match found" response. `0` = fail fast. |
 
 ### Market filter
 
@@ -173,6 +174,9 @@ run `python bot.py` with an auto-restart policy.
   `crypto_short`), it's logged at INFO and skipped. No order sent.
 - **Short markets can expire mid-order.** FAK ensures we never leave
   resting size on a market that's about to resolve.
+- **Live execution uses visible liquidity only.** The bot no longer invents
+  synthetic prices from midpoint when the opposing book side is empty, so
+  some live trades will now skip or fail fast instead of posting a doomed FAK.
 - **Capturing closes.** If `COPY_MIRROR_CLOSES=false`, the bot only mirrors
   BUYs and holds through market resolution. For 5m/15m markets this
   typically works — the market auto-settles — but you'll miss mid-market
