@@ -291,7 +291,11 @@ class PolymarketClient:
         if side_u not in {"BUY", "SELL"}:
             raise ValueError(f"side must be BUY or SELL, got {side!r}")
         args = OrderArgs(token_id=token_id, price=price, size=size, side=side_u)
-        return self.clob.create_and_post_order(args, OrderType.FAK)
+        # NOTE: clob.create_and_post_order() hardcodes GTC and its 2nd arg is
+        # PartialCreateOrderOptions, not OrderType. To place a FAK we must
+        # build the signed order first, then post with the FAK order type.
+        signed = self.clob.create_order(args)
+        return self.clob.post_order(signed, OrderType.FAK)
 
     def refresh_conditional_allowance(self, token_id: str) -> None:
         """
